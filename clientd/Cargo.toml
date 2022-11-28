@@ -3,6 +3,18 @@ name = "clientd"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
+anyhow = "1.0.66"
+fedimint-client = { git = "https://github.com/fedimint/fedimint", package = "mint-client" }
+futures = "0.3.25"
+jsonrpsee = { version = "0.16.1", features = [ "full" ] }
+serde = { version = "1.0.148", features = ["derive"] }
+serde_json = "1.0.89"
+strum = { version = "0.24.1", features = [ "derive" ] }
+tokio = { version = "1.22.0", features = [ "full" ] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
+
+[patch.crates-io]
+secp256k1-zkp = { git = "https://github.com/dpc/rust-secp256k1-zkp/", branch = "sanket-pr" }
