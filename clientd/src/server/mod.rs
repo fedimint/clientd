@@ -16,6 +16,13 @@ fn register_methods(module: &mut RpcModule<Context>) -> anyhow::Result<()> {
         context.manager_tx.send(rpc_req).await.unwrap();
         Ok(cbrx.await.unwrap())
     })?;
+
+    module.register_async_method("info", |_, context| async move {
+        let (cbtx, cbrx) = oneshot::channel();
+        let rpc_req = ManagerMessage::CallHandler(RpcRequest::Info(), cbtx);
+        context.manager_tx.send(rpc_req).await.unwrap();
+        Ok(cbrx.await.unwrap())
+    })?;
     Ok(())
 }
 fn register_subscriptions(
