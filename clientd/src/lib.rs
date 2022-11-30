@@ -12,6 +12,42 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 mod rpc;
 pub mod server;
 
+#[derive(Clone)]
+pub struct EventSubscribers(HashMap<EventKey, broadcast::Sender<Event>>);
+
+impl EventSubscribers {
+    pub fn new() -> Self {
+        let mut map = HashMap::new();
+        for event in EventKey::iter() {
+            let (tx, _rx) = broadcast::channel(128);
+            map.insert(event, tx);
+        }
+        Self(map)
+    }
+
+    // will be used later
+    pub fn _subscribe(&self, event_key: &EventKey) -> broadcast::Receiver<Event> {
+        self.0
+            .get(event_key)
+            .expect("if the event exists it was inserted into the hashmap at initialization")
+            .subscribe()
+    }
+
+    pub fn send(&self, event: Event) -> Result<usize, broadcast::error::SendError<Event>> {
+        let tx = self
+            .0
+            .get(&event.event_key)
+            .expect("if the event exists it was inserted into the hashmap at initialization");
+        tx.send(event)
+    }
+}
+
+impl Default for EventSubscribers {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // TODO: remove pub and use this type to enforce invariants
 #[derive(Debug, Serialize)]
 pub struct CallbackResponse(pub Result<String, RpcError>);
@@ -46,7 +82,7 @@ pub enum EventKey {
 pub async fn run_dispatcher(
     _dispatcher_tx: Arc<mpsc::Sender<DispatcherMessage>>, // we will give the dispatcher_tx to worker-tasks that can emit events
     mut dispatcher_rx: mpsc::Receiver<DispatcherMessage>,
-    mut subscribers: HashMap<EventKey, broadcast::Sender<Event>>,
+    subscribers: EventSubscribers,
     mut fedimint_client: Client<UserClientConfig>,
 ) {
     while let Some(msg) = dispatcher_rx.recv().await {
@@ -59,25 +95,13 @@ pub async fn run_dispatcher(
             }
             DispatcherMessage::HandleEvent(event) => {
                 // the tx is broadcast so this will handle all the subscribers
-                let subscriber = subscribers.get_mut(&event.event_key).expect(
-                    "if the event exists it was inserted into the hashmap at initialization",
-                );
-                if subscriber.send(event).is_err() {
+                if subscribers.send(event).is_err() {
                     // we will do if let Err(e) => handle error later but for now make the linter happy
                     tracing::error!("error broadcasting the event to the subscribers");
                 }
             }
         }
     }
-}
-
-pub fn map_subscribers_to_events() -> HashMap<EventKey, broadcast::Sender<Event>> {
-    let mut se_map = HashMap::new();
-    for event in EventKey::iter() {
-        let (tx, _rx) = broadcast::channel(128);
-        se_map.insert(event, tx);
-    }
-    se_map
 }
 
 pub async fn init_fedimint_client(cfg: PathBuf) -> Client<UserClientConfig> {

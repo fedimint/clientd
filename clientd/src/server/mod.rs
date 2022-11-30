@@ -1,10 +1,9 @@
-use crate::{DispatcherMessage, Event, EventKey, RpcRequest};
+use crate::{DispatcherMessage, EventSubscribers, RpcRequest};
 use jsonrpsee::server::ServerBuilder;
 use jsonrpsee::RpcModule;
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot};
 
 pub struct Context {
     dispatcher_tx: Arc<mpsc::Sender<DispatcherMessage>>,
@@ -27,7 +26,7 @@ fn register_methods(module: &mut RpcModule<Context>) -> anyhow::Result<()> {
 }
 fn register_subscriptions(
     _module: &mut RpcModule<Context>,
-    _se_map: HashMap<EventKey, broadcast::Sender<Event>>,
+    _subscribers: EventSubscribers,
 ) -> anyhow::Result<()> {
     // TODO: register subscriptions for events like NewCoinsFetched et.c
     // we will hardcode the subscription closure to the EventKey. not beautiful but worth avoiding complexity in design
@@ -35,24 +34,24 @@ fn register_subscriptions(
 }
 fn create_rpc_module(
     dispatcher_tx: Arc<mpsc::Sender<DispatcherMessage>>,
-    se_map: HashMap<EventKey, broadcast::Sender<Event>>,
+    subscribers: EventSubscribers,
 ) -> anyhow::Result<RpcModule<Context>> {
     let context = Context { dispatcher_tx };
     let mut module = RpcModule::new(context);
     register_methods(&mut module)?;
-    register_subscriptions(&mut module, se_map)?;
+    register_subscriptions(&mut module, subscribers)?;
     Ok(module)
 }
 pub async fn run_server(
     dispatcher_tx: Arc<mpsc::Sender<DispatcherMessage>>,
-    se_map: HashMap<EventKey, broadcast::Sender<Event>>,
+    subscribers: EventSubscribers,
 ) -> anyhow::Result<SocketAddr> {
     // TODO: Telemetry
     let server = ServerBuilder::default()
         .build("127.0.0.1:0".parse::<SocketAddr>()?)
         .await?;
 
-    let module = create_rpc_module(dispatcher_tx, se_map)?;
+    let module = create_rpc_module(dispatcher_tx, subscribers)?;
     let addr = server.local_addr()?;
     tracing::info!("server address: {}", addr);
     let handle = server.start(module)?;

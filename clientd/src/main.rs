@@ -1,5 +1,5 @@
 use clientd::server::run_server;
-use clientd::{init_fedimint_client, map_subscribers_to_events, run_dispatcher};
+use clientd::{init_fedimint_client, run_dispatcher, EventSubscribers};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -18,13 +18,14 @@ async fn main() -> anyhow::Result<()> {
     let (dispatcher_tx, dispatcher_rx) = mpsc::channel(128);
     let dispatcher_tx = Arc::new(dispatcher_tx);
 
-    let se_map = map_subscribers_to_events();
-    let _server_addr = run_server(Arc::clone(&dispatcher_tx), se_map.clone()).await?;
+    let subscribers = EventSubscribers::default();
+
+    let _server_addr = run_server(Arc::clone(&dispatcher_tx), subscribers.clone()).await?;
 
     run_dispatcher(
         Arc::clone(&dispatcher_tx),
         dispatcher_rx,
-        se_map,
+        subscribers,
         fedimint_client,
     )
     .await;
