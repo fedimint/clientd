@@ -1,4 +1,4 @@
-use crate::{Event, EventKey, ManagerMessage, RpcRequest};
+use crate::{DispatcherMessage, Event, EventKey, RpcRequest};
 use jsonrpsee::server::ServerBuilder;
 use jsonrpsee::RpcModule;
 use std::collections::HashMap;
@@ -7,20 +7,20 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, oneshot};
 
 pub struct Context {
-    manager_tx: Arc<mpsc::Sender<ManagerMessage>>,
+    dispatcher_tx: Arc<mpsc::Sender<DispatcherMessage>>,
 }
 fn register_methods(module: &mut RpcModule<Context>) -> anyhow::Result<()> {
     module.register_async_method("health_check", |_, context| async move {
         let (cbtx, cbrx) = oneshot::channel();
-        let rpc_req = ManagerMessage::CallHandler(RpcRequest::HealthCheck(), cbtx);
-        context.manager_tx.send(rpc_req).await.unwrap();
+        let rpc_req = DispatcherMessage::CallHandler(RpcRequest::HealthCheck(), cbtx);
+        context.dispatcher_tx.send(rpc_req).await.unwrap();
         Ok(cbrx.await.unwrap())
     })?;
 
     module.register_async_method("info", |_, context| async move {
         let (cbtx, cbrx) = oneshot::channel();
-        let rpc_req = ManagerMessage::CallHandler(RpcRequest::Info(), cbtx);
-        context.manager_tx.send(rpc_req).await.unwrap();
+        let rpc_req = DispatcherMessage::CallHandler(RpcRequest::Info(), cbtx);
+        context.dispatcher_tx.send(rpc_req).await.unwrap();
         Ok(cbrx.await.unwrap())
     })?;
     Ok(())
@@ -34,17 +34,17 @@ fn register_subscriptions(
     Ok(())
 }
 fn create_rpc_module(
-    manager_tx: Arc<mpsc::Sender<ManagerMessage>>,
+    dispatcher_tx: Arc<mpsc::Sender<DispatcherMessage>>,
     se_map: HashMap<EventKey, broadcast::Sender<Event>>,
 ) -> anyhow::Result<RpcModule<Context>> {
-    let context = Context { manager_tx };
+    let context = Context { dispatcher_tx };
     let mut module = RpcModule::new(context);
     register_methods(&mut module)?;
     register_subscriptions(&mut module, se_map)?;
     Ok(module)
 }
 pub async fn run_server(
-    manager_tx: Arc<mpsc::Sender<ManagerMessage>>,
+    dispatcher_tx: Arc<mpsc::Sender<DispatcherMessage>>,
     se_map: HashMap<EventKey, broadcast::Sender<Event>>,
 ) -> anyhow::Result<SocketAddr> {
     // TODO: Telemetry
@@ -52,7 +52,7 @@ pub async fn run_server(
         .build("127.0.0.1:0".parse::<SocketAddr>()?)
         .await?;
 
-    let module = create_rpc_module(manager_tx, se_map)?;
+    let module = create_rpc_module(dispatcher_tx, se_map)?;
     let addr = server.local_addr()?;
     tracing::info!("server address: {}", addr);
     let handle = server.start(module)?;

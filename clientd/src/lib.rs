@@ -22,7 +22,7 @@ pub enum RpcError {
     ClientError,
 }
 #[derive(Debug)]
-pub enum ManagerMessage {
+pub enum DispatcherMessage {
     CallHandler(RpcRequest, oneshot::Sender<CallbackResponse>),
     HandleEvent(Event),
 }
@@ -43,21 +43,21 @@ pub struct Event {
 pub enum EventKey {
     Mock,
 }
-pub async fn run_manager(
-    _manager_tx: Arc<mpsc::Sender<ManagerMessage>>, // we will give the manager_tx to worker-tasks that can emit events
-    mut manager_rx: mpsc::Receiver<ManagerMessage>,
+pub async fn run_dispatcher(
+    _dispatcher_tx: Arc<mpsc::Sender<DispatcherMessage>>, // we will give the dispatcher_tx to worker-tasks that can emit events
+    mut dispatcher_rx: mpsc::Receiver<DispatcherMessage>,
     mut subscribers: HashMap<EventKey, broadcast::Sender<Event>>,
     mut fedimint_client: Client<UserClientConfig>,
 ) {
-    while let Some(msg) = manager_rx.recv().await {
+    while let Some(msg) = dispatcher_rx.recv().await {
         match msg {
-            ManagerMessage::CallHandler(request, callback) => {
+            DispatcherMessage::CallHandler(request, callback) => {
                 let response = handle_rpc_request(request, &mut fedimint_client).await;
                 callback
                     .send(CallbackResponse(response))
                     .expect("the rpc-method closure did not drop the callback receiver");
             }
-            ManagerMessage::HandleEvent(event) => {
+            DispatcherMessage::HandleEvent(event) => {
                 // the tx is broadcast so this will handle all the subscribers
                 let subscriber = subscribers.get_mut(&event.event_key).expect(
                     "if the event exists it was inserted into the hashmap at initialization",
