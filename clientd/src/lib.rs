@@ -48,6 +48,26 @@ impl Default for EventSubscribers {
     }
 }
 
+pub struct FedimintClient(Client<UserClientConfig>);
+
+impl FedimintClient {
+    pub async fn open_from(cfg: PathBuf) -> Self {
+        let cfg_path = cfg.join("client.json");
+        let db_path = cfg.join("client.db");
+        let cfg: UserClientConfig = load_from_file(&cfg_path);
+        let db = fedimint_rocksdb::RocksDb::open(db_path).unwrap().into();
+
+        let client = Client::new(cfg.clone(), db, Default::default()).await;
+        Self(client)
+    }
+}
+
+impl AsRef<Client<UserClientConfig>> for FedimintClient {
+    fn as_ref(&self) -> &Client<UserClientConfig> {
+        &self.0
+    }
+}
+
 // TODO: remove pub and use this type to enforce invariants
 #[derive(Debug, Serialize)]
 pub struct CallbackResponse(pub Result<String, RpcError>);
@@ -83,12 +103,12 @@ pub async fn run_dispatcher(
     _dispatcher_tx: Arc<mpsc::Sender<DispatcherMessage>>, // we will give the dispatcher_tx to worker-tasks that can emit events
     mut dispatcher_rx: mpsc::Receiver<DispatcherMessage>,
     subscribers: EventSubscribers,
-    mut fedimint_client: Client<UserClientConfig>,
+    fedimint_client: FedimintClient,
 ) {
     while let Some(msg) = dispatcher_rx.recv().await {
         match msg {
             DispatcherMessage::CallHandler(request, callback) => {
-                let response = handle_rpc_request(request, &mut fedimint_client).await;
+                let response = handle_rpc_request(request, fedimint_client.as_ref()).await;
                 callback
                     .send(CallbackResponse(response))
                     .expect("the rpc-method closure did not drop the callback receiver");
@@ -104,19 +124,10 @@ pub async fn run_dispatcher(
     }
 }
 
-pub async fn init_fedimint_client(cfg: PathBuf) -> Client<UserClientConfig> {
-    let cfg_path = cfg.join("client.json");
-    let db_path = cfg.join("client.db");
-    let cfg: UserClientConfig = load_from_file(&cfg_path);
-    let db = fedimint_rocksdb::RocksDb::open(db_path).unwrap().into();
-
-    Client::new(cfg.clone(), db, Default::default()).await
-}
-
 // FIXME: jsonrpsee will do the serialization for me. how can I just pass any type over the channel, the serialize -> string -> serialize feels a bit stupid
 async fn handle_rpc_request(
     request: RpcRequest,
-    fedimint_client: &mut Client<UserClientConfig>,
+    fedimint_client: &Client<UserClientConfig>,
 ) -> Result<String, RpcError> {
     match request {
         RpcRequest::HealthCheck() => Ok("".to_string()),

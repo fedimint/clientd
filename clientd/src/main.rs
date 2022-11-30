@@ -1,5 +1,5 @@
 use clientd::server::run_server;
-use clientd::{init_fedimint_client, run_dispatcher, EventSubscribers};
+use clientd::{run_dispatcher, EventSubscribers, FedimintClient};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -13,7 +13,7 @@ async fn main() -> anyhow::Result<()> {
 
     // TODO: print error
     let cfg: PathBuf = std::env::args().nth(1).expect("no cfg").into();
-    let fedimint_client = init_fedimint_client(cfg).await;
+    let fedimint_client = FedimintClient::open_from(cfg).await;
 
     let (dispatcher_tx, dispatcher_rx) = mpsc::channel(128);
     let dispatcher_tx = Arc::new(dispatcher_tx);
