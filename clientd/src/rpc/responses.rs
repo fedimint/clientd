@@ -3,7 +3,13 @@ use fedimint_client::mint::SpendableNote;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
+pub enum HandlerResponse {
+    HealthCheck(),
+    Info(InfoResponse),
+}
+
+#[derive(Debug, Serialize)]
 pub struct InfoResponse {
     total_amount: Amount,
     total_num_notes: usize,

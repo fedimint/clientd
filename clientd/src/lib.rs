@@ -1,7 +1,9 @@
+use crate::rpc::responses::HandlerResponse;
 use fedimint_client::{Client, UserClientConfig};
+use jsonrpsee::core::Error;
+use jsonrpsee::types::error::CallError;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use serde_json::json;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -68,18 +70,9 @@ impl AsRef<Client<UserClientConfig>> for FedimintClient {
     }
 }
 
-// TODO: remove pub and use this type to enforce invariants
-#[derive(Debug, Serialize)]
-pub struct CallbackResponse(pub Result<String, RpcError>);
-
-// TODO: figure out best approach for error handling
-#[derive(Debug, Serialize)]
-pub enum RpcError {
-    ClientError,
-}
 #[derive(Debug)]
 pub enum DispatcherMessage {
-    CallHandler(RpcRequest, oneshot::Sender<CallbackResponse>),
+    CallHandler(RpcRequest, oneshot::Sender<Result<HandlerResponse, Error>>),
     HandleEvent(Event),
 }
 
@@ -108,9 +101,11 @@ pub async fn run_dispatcher(
     while let Some(msg) = dispatcher_rx.recv().await {
         match msg {
             DispatcherMessage::CallHandler(request, callback) => {
-                let response = handle_rpc_request(request, fedimint_client.as_ref()).await;
+                let response = handle_rpc_request(request, fedimint_client.as_ref())
+                    .await
+                    .map_err(Error::from);
                 callback
-                    .send(CallbackResponse(response))
+                    .send(response)
                     .expect("the rpc-method closure did not drop the callback receiver");
             }
             DispatcherMessage::HandleEvent(event) => {
@@ -124,16 +119,13 @@ pub async fn run_dispatcher(
     }
 }
 
-// FIXME: jsonrpsee will do the serialization for me. how can I just pass any type over the channel, the serialize -> string -> serialize feels a bit stupid
 async fn handle_rpc_request(
     request: RpcRequest,
     fedimint_client: &Client<UserClientConfig>,
-) -> Result<String, RpcError> {
+) -> Result<HandlerResponse, CallError> {
     match request {
-        RpcRequest::HealthCheck() => Ok("".to_string()),
-        RpcRequest::Info() => rpc::info(fedimint_client)
-            .await
-            .map(|info_res| serde_json::to_string(&json!(info_res)).unwrap()),
+        RpcRequest::HealthCheck() => Ok(HandlerResponse::HealthCheck()),
+        RpcRequest::Info() => rpc::info(fedimint_client).await,
     }
 }
 

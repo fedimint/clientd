@@ -13,14 +13,14 @@ fn register_methods(module: &mut RpcModule<Context>) -> anyhow::Result<()> {
         let (cbtx, cbrx) = oneshot::channel();
         let rpc_req = DispatcherMessage::CallHandler(RpcRequest::HealthCheck(), cbtx);
         context.dispatcher_tx.send(rpc_req).await.unwrap();
-        Ok(cbrx.await.unwrap())
+        cbrx.await.unwrap()
     })?;
 
     module.register_async_method("info", |_, context| async move {
         let (cbtx, cbrx) = oneshot::channel();
         let rpc_req = DispatcherMessage::CallHandler(RpcRequest::Info(), cbtx);
         context.dispatcher_tx.send(rpc_req).await.unwrap();
-        Ok(cbrx.await.unwrap())
+        cbrx.await.unwrap()
     })?;
     Ok(())
 }
