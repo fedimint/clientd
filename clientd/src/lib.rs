@@ -51,9 +51,9 @@ impl Default for EventSubscribers {
 pub struct FedimintClient(Client<UserClientConfig>);
 
 impl FedimintClient {
-    pub async fn open_from(cfg: PathBuf) -> Self {
-        let cfg_path = cfg.join("client.json");
-        let db_path = cfg.join("client.db");
+    pub async fn open_from(client_workdir: PathBuf) -> Self {
+        let cfg_path = client_workdir.join("client.json");
+        let db_path = client_workdir.join("client.db");
         let cfg: UserClientConfig = load_from_file(&cfg_path);
         let db = fedimint_rocksdb::RocksDb::open(db_path).unwrap().into();
 

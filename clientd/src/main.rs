@@ -1,8 +1,18 @@
+use clap::Parser;
 use clientd::server::run_server;
 use clientd::{run_dispatcher, EventSubscribers, FedimintClient};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc;
+
+// TODO: I saw other people using yaml and .env files to configure their project. I think this might be a better approach but for now go with cmd-args
+/// JSON-RPC 2.0 for the fedimint client
+#[derive(Parser)]
+struct Opt {
+    /// The working directory of the client containing the config and db
+    #[arg(long = "workdir")]
+    workdir: PathBuf,
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -11,9 +21,8 @@ async fn main() -> anyhow::Result<()> {
         .try_init()
         .expect("setting default subscriber failed");
 
-    // TODO: print error
-    let cfg: PathBuf = std::env::args().nth(1).expect("no cfg").into();
-    let fedimint_client = FedimintClient::open_from(cfg).await;
+    let client_workdir = Opt::parse();
+    let fedimint_client = FedimintClient::open_from(client_workdir.workdir).await;
 
     let (dispatcher_tx, dispatcher_rx) = mpsc::channel(128);
     let dispatcher_tx = Arc::new(dispatcher_tx);
