@@ -15,6 +15,7 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 mod rpc;
 pub mod server;
 
+// TODO: think about using only one broadcast channel and filter for events
 #[derive(Clone)]
 pub struct EventSubscribers(HashMap<EventKey, broadcast::Sender<Event>>);
 
