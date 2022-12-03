@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.66"
+clap = { version = "4.0.29", features = ["derive"] }
 fedimint-client = { git = "https://github.com/fedimint/fedimint", package = "mint-client" }
 fedimint-rocksdb = { git = "https://github.com/fedimint/fedimint" }
 fedimint-api = { git = "https://github.com/fedimint/fedimint" }

@@ -1,13 +1,13 @@
-use crate::rpc::responses::InfoResponse;
-use crate::RpcError;
+use crate::rpc::responses::{HandlerResponse, InfoResponse};
 use fedimint_client::{Client, UserClientConfig};
+use jsonrpsee::types::error::CallError;
 
 mod params;
-mod responses;
+pub mod responses;
 
 pub async fn info(
-    fedimint_client: &mut Client<UserClientConfig>,
-) -> Result<InfoResponse, RpcError> {
+    fedimint_client: &Client<UserClientConfig>,
+) -> Result<HandlerResponse, CallError> {
     let coins = fedimint_client.coins();
-    Ok(InfoResponse::new(coins))
+    Ok(HandlerResponse::Info(InfoResponse::new(coins)))
 }
