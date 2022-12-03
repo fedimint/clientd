@@ -29,8 +29,7 @@ impl EventSubscribers {
         Self(map)
     }
 
-    // will be used later
-    pub fn _subscribe(&self, event_key: &EventKey) -> broadcast::Receiver<Event> {
+    pub fn subscribe(&self, event_key: &EventKey) -> broadcast::Receiver<Event> {
         self.0
             .get(event_key)
             .expect("if the event exists it was inserted into the hashmap at initialization")
@@ -209,21 +208,18 @@ mod test {
         // might be redundant because of the `dispatcher_handles_event` test but its just a small test anyway
         let subscribers = EventSubscribers::default();
 
-        let mut rx = subscribers
-            .as_ref()
-            .get(&EventKey::Mock)
-            .unwrap()
-            .subscribe();
-        let tx2 = subscribers.as_ref().get(&EventKey::Mock).unwrap().clone();
+        let mut rx = subscribers.subscribe(&EventKey::Mock);
+        let subs2 = subscribers.clone();
 
         // the spawn might be unnecessary but it shows in what context this can be used in
         tokio::spawn(async move {
             for _ in 0..5 {
-                tx2.send(Event {
-                    event_key: EventKey::Mock,
-                    data: "test".to_string(),
-                })
-                .unwrap();
+                subs2
+                    .send(Event {
+                        event_key: EventKey::Mock,
+                        data: "test".to_string(),
+                    })
+                    .unwrap();
             }
         })
         .await
@@ -283,11 +279,7 @@ mod test {
     async fn dispatcher_handles_event() {
         let subscribers = EventSubscribers::default();
         let fm_client = FedimintClient::fake().await;
-        let mut mock_event_subscriber = subscribers
-            .as_ref()
-            .get(&EventKey::Mock)
-            .unwrap()
-            .subscribe();
+        let mut mock_event_subscriber = subscribers.subscribe(&EventKey::Mock);
         let (dispatcher_tx, dispachter_rx) = mpsc::channel(8);
         let dispatcher_tx = Arc::new(dispatcher_tx);
 
