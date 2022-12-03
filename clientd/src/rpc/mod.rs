@@ -5,6 +5,7 @@ use jsonrpsee::types::error::CallError;
 mod params;
 pub mod responses;
 
+/// Handler for the rpc-method "info"
 pub async fn info(
     fedimint_client: &Client<UserClientConfig>,
 ) -> Result<HandlerResponse, CallError> {

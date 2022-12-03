@@ -1,8 +1,10 @@
+//! This module contains all datastructures which will be serialized as the result object in the json-rpc response object.
 use fedimint_api::{Amount, TieredMulti};
 use fedimint_client::mint::SpendableNote;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
+/// Contains all responses that rpc-calls can produce.
 #[derive(Debug, Serialize)]
 pub enum HandlerResponse {
     HealthCheck(),
@@ -10,6 +12,7 @@ pub enum HandlerResponse {
 }
 
 #[derive(Debug, Serialize)]
+/// Result data of the rpc-method info.
 pub struct InfoResponse {
     total_amount: Amount,
     total_num_notes: usize,
