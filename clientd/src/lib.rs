@@ -16,6 +16,8 @@ mod rpc;
 pub mod server;
 
 // TODO: think about using only one broadcast channel and filter for events
+/// Maps broadcast senders to events. Creates a broadcast sender for every `EventKey` at initialisation, and exposes
+/// the ability to subscribe to an `EventKey` or broadcast an `Event` to all it's subscribers
 #[derive(Clone)]
 pub struct EventSubscribers(HashMap<EventKey, broadcast::Sender<Event>>);
 
@@ -29,14 +31,15 @@ impl EventSubscribers {
         Self(map)
     }
 
-    // will be used later
-    pub fn _subscribe(&self, event_key: &EventKey) -> broadcast::Receiver<Event> {
+    /// Returns a broadcast receiver to the correct sender for that event key. 
+    pub fn subscribe(&self, event_key: &EventKey) -> broadcast::Receiver<Event> {
         self.0
             .get(event_key)
             .expect("if the event exists it was inserted into the hashmap at initialization")
             .subscribe()
     }
 
+    /// Sends an `Event` using the correct broadcast sender for the events `EventKey`
     pub fn send(&self, event: Event) -> Result<usize, broadcast::error::SendError<Event>> {
         let tx = self
             .0
@@ -52,9 +55,11 @@ impl Default for EventSubscribers {
     }
 }
 
+/// Wraps the fedimint user client to make it's name more concise and prepare for integration tests needing to mock it.
 pub struct FedimintClient(Client<UserClientConfig>);
 
 impl FedimintClient {
+    /// Initializes a real fedimint user client from a configuration directory
     pub async fn open_from(client_workdir: PathBuf) -> Self {
         let cfg_path = client_workdir.join("client.json");
         let db_path = client_workdir.join("client.db");
@@ -65,6 +70,7 @@ impl FedimintClient {
         Self(client)
     }
 
+    /// Initializes a fake fedimint user client. this does not mock its functionality and is not usable to test rpc.
     pub async fn fake() -> Self {
         // TODO: make the config configurable (integrationtests/fixtures)
         let fake_cfg = json!({
@@ -135,28 +141,38 @@ impl AsRef<Client<UserClientConfig>> for FedimintClient {
     }
 }
 
+/// Messages send to the dispatcher. The dispatcher is waiting for the messages in a loop and processes them accordingly.
 #[derive(Debug)]
 pub enum DispatcherMessage {
     CallHandler(RpcRequest, oneshot::Sender<Result<HandlerResponse, Error>>),
     HandleEvent(Event),
 }
 
+/// Each variant represents a single rpc-method, possibly containing the (rpc) parameters.
 #[derive(Debug)]
 pub enum RpcRequest {
     HealthCheck(),
     Info(),
 }
 
+/// Represents any event that can be emitted by rpc-handlers, worker-tasks or any other clientd component.
+/// The event_key and the data can not be checked for correctness. The event emitter has to choose the right key.
 #[derive(Debug, Clone, Serialize)]
 pub struct Event {
     event_key: EventKey,
     data: String,
 }
 
+/// Each variant represents one event known and thus serviceable by the `EventSubscribers`.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, EnumIter, Serialize)]
 pub enum EventKey {
     Mock,
 }
+
+/// Waits for new `DispatcherMessage` and handles them.
+/// Owns types that shall not be used concurrently and takes care to use them correctly.
+/// Will keep track of clientd specific state and recovers it to resume on restart.
+/// May send worker-tasks messages for assignments.
 pub async fn run_dispatcher(
     _dispatcher_tx: Arc<mpsc::Sender<DispatcherMessage>>, // we will give the dispatcher_tx to worker-tasks that can emit events
     mut dispatcher_rx: mpsc::Receiver<DispatcherMessage>,
@@ -184,6 +200,7 @@ pub async fn run_dispatcher(
     }
 }
 
+/// Handles a rpc-call by matching its method and calling the correct handler.
 async fn handle_rpc_request(
     request: RpcRequest,
     fedimint_client: &Client<UserClientConfig>,
@@ -209,21 +226,18 @@ mod test {
         // might be redundant because of the `dispatcher_handles_event` test but its just a small test anyway
         let subscribers = EventSubscribers::default();
 
-        let mut rx = subscribers
-            .as_ref()
-            .get(&EventKey::Mock)
-            .unwrap()
-            .subscribe();
-        let tx2 = subscribers.as_ref().get(&EventKey::Mock).unwrap().clone();
+        let mut rx = subscribers.subscribe(&EventKey::Mock);
+        let subs2 = subscribers.clone();
 
         // the spawn might be unnecessary but it shows in what context this can be used in
         tokio::spawn(async move {
             for _ in 0..5 {
-                tx2.send(Event {
-                    event_key: EventKey::Mock,
-                    data: "test".to_string(),
-                })
-                .unwrap();
+                subs2
+                    .send(Event {
+                        event_key: EventKey::Mock,
+                        data: "test".to_string(),
+                    })
+                    .unwrap();
             }
         })
         .await
@@ -283,11 +297,7 @@ mod test {
     async fn dispatcher_handles_event() {
         let subscribers = EventSubscribers::default();
         let fm_client = FedimintClient::fake().await;
-        let mut mock_event_subscriber = subscribers
-            .as_ref()
-            .get(&EventKey::Mock)
-            .unwrap()
-            .subscribe();
+        let mut mock_event_subscriber = subscribers.subscribe(&EventKey::Mock);
         let (dispatcher_tx, dispachter_rx) = mpsc::channel(8);
         let dispatcher_tx = Arc::new(dispatcher_tx);
 
